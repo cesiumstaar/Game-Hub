@@ -1,0 +1,177 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+
+\definecolor{codebg}{rgb}{0.95,0.95,0.95}
+\lstset{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red!60!black},
+}
+
+\title{\textbf{Mini Game Hub} \\ \large Project Report}
+\author{Shresth \and Aryan}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ─────────────────────────────────────────────────────────────────────
+\section{External Libraries Used}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Library} & \textbf{Purpose} \\
+\midrule
+\texttt{pygame-ce}     & Graphical user interface for all games and menus \\
+\texttt{numpy}         & Board representation as 2-D arrays; vectorised win detection \\
+\texttt{matplotlib}    & Post-game bar and pie chart visualisations \\
+\texttt{pathlib}       & Cross-platform file path handling \\
+\texttt{csv}           & Reading/writing \texttt{history.csv} \\
+\texttt{subprocess}    & Calling \texttt{leaderboard.sh} from Python \\
+\texttt{datetime}      & Timestamping game results \\
+\texttt{collections.Counter} & Counting wins and game frequencies for charts \\
+\bottomrule
+\end{tabular}
+\caption{Python libraries and their roles.}
+\end{table}
+
+Bash commands used: \texttt{sha256sum} / \texttt{shasum} (for SHA-256 hashing),
+\texttt{awk} (text processing in \texttt{leaderboard.sh}), and standard utilities
+(\texttt{sort}, \texttt{wc}, \texttt{tail}).
+
+% ─────────────────────────────────────────────────────────────────────
+\section{Features Implemented}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Bash Authentication} (\texttt{main.sh}) -- Login and registration
+          for two players with SHA-256 password hashing.  Stored in
+          \texttt{users.tsv}.
+    \item \textbf{Game Menu} (Pygame GUI) -- Interactive menu to choose
+          Tic-Tac-Toe, Othello, or Connect Four.
+    \item \textbf{Tic-Tac-Toe} -- 10$\times$10 board, 5-in-a-row to win.
+          Win detection via NumPy sliding windows.
+    \item \textbf{Othello (Reversi)} -- 8$\times$8 board with full move
+          validation, disc flipping, turn skipping, and end-game scoring.
+    \item \textbf{Connect Four} -- 7$\times$7 vertical grid with gravity,
+          coin-drop animation, and NumPy-based win detection.
+    \item \textbf{Result Recording} -- Each game appends winner, loser,
+          date, and game name to \texttt{history.csv}.
+    \item \textbf{Leaderboard} (\texttt{leaderboard.sh}) -- Formatted table
+          showing per-user per-game wins, losses, and W/L ratio, sortable
+          by any metric.
+    \item \textbf{Matplotlib Visualisations} -- Top-5 players bar chart and
+          most-played games pie chart displayed after each game.
+    \item \textbf{Post-Game Loop} -- Players can choose to play again or quit.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────
+\section{Code Logic Explanation}
+
+\subsection{Generic Base Class (\texttt{base\_game.py})}
+\texttt{BoardGame} is an abstract class providing:
+\begin{itemize}
+    \item A NumPy array (\texttt{self.board}) initialised to zeros.
+    \item Turn tracking via \texttt{current\_player} (1 or 2).
+    \item \texttt{switch\_turn()} toggles between players.
+    \item \texttt{check\_win()} is abstract -- each game implements its own logic.
+\end{itemize}
+
+\subsection{Tic-Tac-Toe (\texttt{tictactoe.py})}
+Player~1 places $+1$, Player~2 places $-1$.  Win detection uses
+\texttt{numpy.lib.stride\_tricks.sliding\_window\_view} to extract all
+$5$-cell windows horizontally and vertically, then sums each window.
+A sum of $+5$ means Player~1 wins; $-5$ means Player~2.
+Diagonals are checked via 5$\times$5 sub-blocks and \texttt{np.diagonal}.
+
+\subsection{Othello (\texttt{othello.py})}
+Valid moves are found by scanning all eight compass directions from each
+empty cell.  Disc flipping iterates along each direction until a friendly
+disc is found.  The win condition counts discs using
+\texttt{np.count\_nonzero} (no loops).
+
+\subsection{Connect Four (\texttt{connect4.py})}
+Coins drop to the lowest empty row (found with \texttt{np.where}).
+Win detection creates a boolean mask per player and sums all 4-cell
+windows using NumPy slicing in four directions.  A sum of~4 on the mask
+indicates four-in-a-row.
+
+\subsection{Authentication (\texttt{main.sh})}
+Passwords are hashed with \texttt{sha256sum} (or \texttt{shasum -a 256}
+on macOS) and stored in \texttt{users.tsv}.  On login the input hash is
+compared against the stored hash.  New users are offered registration.
+
+\subsection{Leaderboard (\texttt{leaderboard.sh})}
+Reads \texttt{history.csv}, extracts unique players and games using
+\texttt{awk}, then loops over each player to count wins and losses per
+game.  Results are sorted by the user-selected metric and printed in a
+formatted table.
+
+% ─────────────────────────────────────────────────────────────────────
+\section{Hurdles Faced and Solutions}
+
+\begin{enumerate}
+    \item \textbf{NumPy win detection without loops.}
+          Tic-Tac-Toe's diagonal checks were tricky.  We solved it by
+          using \texttt{sliding\_window\_view} over 5$\times$5 sub-blocks
+          and extracting diagonals with \texttt{np.diagonal}.
+
+    \item \textbf{Connect Four sum ambiguity.}
+          Storing players as 1 and 2 meant two player-2 coins could sum
+          to~4, falsely matching player~1's target.  We fixed this by
+          creating boolean masks per player before summing.
+
+    \item \textbf{Pygame and Matplotlib conflict.}
+          Both libraries use display backends.  We used Matplotlib's
+          \texttt{Agg} backend to render charts to image files, then
+          loaded them into Pygame as surfaces.
+
+    \item \textbf{Cross-platform SHA-256.}
+          Linux has \texttt{sha256sum}, macOS has \texttt{shasum -a 256}.
+          We detect the available command at runtime.
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────
+\section{What We Would Do with 10 More Hours}
+
+\begin{itemize}
+    \item Add an AI opponent using minimax with alpha-beta pruning.
+    \item Implement network multiplayer so players can compete remotely.
+    \item Add sound effects and background music using Pygame's mixer.
+    \item Create animated transitions between screens.
+    \item Add more games (e.g.\ Checkers, Mancala).
+    \item Implement user profiles with avatars and match history.
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────
+\section{Bibliography}
+
+\begin{enumerate}
+    \item Pygame CE Documentation: \url{https://pyga.me}
+    \item NumPy Documentation: \url{https://numpy.org/doc/}
+    \item Python \texttt{abc} module: \url{https://docs.python.org/3/library/abc.html}
+    \item Python Inheritance Tutorial: \url{https://docs.python.org/3/tutorial/classes.html}
+    \item Othello Rules: \url{https://www.worldothello.org}
+    \item Connect Four Rules: \url{https://boardgamegeek.com/boardgame/2719/connect-four}
+    \item SHA-256 in Bash: \texttt{man sha256sum}
+    \item Matplotlib Documentation: \url{https://matplotlib.org/stable/}
+\end{enumerate}
+
+\end{document}
