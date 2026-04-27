@@ -1,0 +1,19 @@
+# Generated at runtime - do not commit
+users.tsv
+history.csv
+stats.png
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.pdf
+
+# macOS metadata
+.DS_Store
