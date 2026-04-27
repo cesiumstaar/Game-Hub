@@ -5,8 +5,8 @@ Win detection uses pure NumPy operations -- no Python-level loops over
 individual cells.  Player 1 places +1, Player 2 places -1; a window of
 five cells that sums to +5 or -5 indicates a win.
 """
+from __future__ import annotations
 
-import sys
 import numpy as np
 import pygame
 
@@ -265,7 +265,7 @@ class TicTacToe(BoardGame):
 
         # Instruction text
         font_sm = pygame.font.SysFont("arial", 18)
-        hint = font_sm.render("Press R to restart  |  Press Q to quit", True, GRAY)
+        hint = font_sm.render("Click anywhere or press Q to continue", True, GRAY)
         surface.blit(hint, (dx + (dw - hint.get_width()) // 2, dy + 90))
 
     # ------------------------------------------------------------------
@@ -299,7 +299,6 @@ class TicTacToe(BoardGame):
             (winner_name, loser_name) if someone won, or
             ("draw", "draw") on a draw.
         """
-        pygame.init()
         screen = pygame.display.set_mode((self.WINDOW_W, self.WINDOW_H))
         pygame.display.set_caption(self.game_name)
         clock = pygame.time.Clock()
@@ -321,16 +320,13 @@ class TicTacToe(BoardGame):
 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_q:
-                        # Quit the game immediately
                         running = False
                         break
-                    if event.key == pygame.K_r and game_over:
-                        # Restart: clear board and state
-                        self.reset_board()
-                        self._win_cells = []
-                        winner = 0
-                        draw = False
-                        game_over = False
+
+                # Any click or key dismisses the game-over dialog
+                if game_over and event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+                    running = False
+                    break
 
                 if event.type == pygame.MOUSEBUTTONDOWN and not game_over:
                     cell = self._cell_from_pixel(*event.pos)
@@ -384,7 +380,6 @@ class TicTacToe(BoardGame):
             pygame.display.flip()
             clock.tick(30)  # cap at 30 FPS -- plenty for a board game
 
-        pygame.quit()
         return result
 
 

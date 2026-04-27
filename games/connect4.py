@@ -8,9 +8,7 @@ diagonally) wins.  If the board fills up with no winner the game is a draw.
 
 Win detection uses pure NumPy operations (no Python loops).
 """
-
-import sys
-from typing import Tuple
+from __future__ import annotations
 
 import numpy as np
 import pygame
@@ -129,7 +127,7 @@ class ConnectFour(BoardGame):
     # ── pygame rendering helpers ──────────────────────────────────────
 
     @staticmethod
-    def _player_colour(player: int) -> Tuple[int, int, int]:
+    def _player_colour(player: int) -> tuple[int, int, int]:
         """Return the RGB colour for a given player number."""
         return RED if player == 1 else YELLOW
 
@@ -216,7 +214,7 @@ class ConnectFour(BoardGame):
 
     # ── main game loop ────────────────────────────────────────────────
 
-    def run(self) -> Tuple[str, str]:
+    def run(self) -> tuple[str, str]:
         """
         Launch the Pygame window and run the game until someone wins or it
         is a draw.
@@ -226,25 +224,31 @@ class ConnectFour(BoardGame):
         tuple[str, str]
             (winner_name, loser_name) or ("draw", "draw").
         """
-        pygame.init()
         surface = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
         pygame.display.set_caption("Connect Four")
         clock = pygame.time.Clock()
 
         game_over = False
-        result: Tuple[str, str] = ("draw", "draw")
+        result: tuple[str, str] = ("draw", "draw")
         hover_col = -1                     # column the mouse is hovering over
 
         # ---- event loop ------------------------------------------------------
-        while True:
+        running = True
+        while running:
             for event in pygame.event.get():
-                # Handle window close or Escape key
+                # Handle window close
                 if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+                    running = False
+                    break
+
+                # Any click or key dismisses the game-over screen
+                if game_over and event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
+                    running = False
+                    break
+
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    return result
+                    running = False
+                    break
 
                 # Track which column the mouse is over (for the hover indicator)
                 if event.type == pygame.MOUSEMOVE:
@@ -288,11 +292,11 @@ class ConnectFour(BoardGame):
             if game_over:
                 # Show the final result in the status bar
                 if result[0] == "draw":
-                    self._draw_status(surface, "It's a draw!  Press ESC to exit.")
+                    self._draw_status(surface, "It's a draw!  Click or press ESC to continue.")
                 else:
                     self._draw_status(
                         surface,
-                        f"{result[0]} wins!  Press ESC to exit.",
+                        f"{result[0]} wins!  Click or press ESC to continue.",
                     )
             else:
                 # Show whose turn it is and the hover indicator
@@ -303,3 +307,5 @@ class ConnectFour(BoardGame):
 
             pygame.display.flip()
             clock.tick(FPS)
+
+        return result

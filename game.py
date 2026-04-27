@@ -12,10 +12,8 @@ Receives two authenticated usernames from main.sh and manages:
 
 import sys
 import os
-import csv
 import subprocess
 from datetime import datetime
-from collections import Counter
 from pathlib import Path
 
 import pygame
@@ -31,7 +29,7 @@ from games.connect4 import ConnectFour
 
 # ---- Constants ----
 SCREEN_WIDTH = 700
-SCREEN_HEIGHT = 600
+SCREEN_HEIGHT = 640
 FPS = 60
 
 # Color definitions
@@ -56,18 +54,16 @@ LEADERBOARD_SCRIPT = SCRIPT_DIR / "leaderboard.sh"
 def ensure_history_file():
     """Create history.csv with header if it doesn't exist."""
     if not HISTORY_FILE.exists():
-        with open(HISTORY_FILE, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["Winner", "Loser", "Date", "Game"])
+        with open(HISTORY_FILE, "w") as f:
+            f.write("Winner,Loser,Date,Game\n")
 
 
 def record_result(winner: str, loser: str, game_name: str):
     """Append a game result row to history.csv."""
     ensure_history_file()
-    with open(HISTORY_FILE, "a", newline="") as f:
-        writer = csv.writer(f)
-        date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        writer.writerow([winner, loser, date_str, game_name])
+    date_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(HISTORY_FILE, "a") as f:
+        f.write(f"{winner},{loser},{date_str},{game_name}\n")
 
 
 def call_leaderboard(sort_metric: str = "wins"):
@@ -87,15 +83,22 @@ def show_visualizations():
     if not HISTORY_FILE.exists():
         return
 
-    # Read history data
+    # Read history data using plain file I/O (no csv module)
     winners = []
     games_played = []
     with open(HISTORY_FILE, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if row["Winner"] != "draw":
-                winners.append(row["Winner"])
-            games_played.append(row["Game"])
+        lines = f.read().splitlines()
+    for line in lines[1:]:          # skip header row
+        if not line.strip():
+            continue
+        parts = line.split(",")
+        if len(parts) < 4:
+            continue
+        winner_val = parts[0]
+        game_val = parts[3]
+        if winner_val != "draw":
+            winners.append(winner_val)
+        games_played.append(game_val)
 
     if not winners and not games_played:
         return
@@ -105,12 +108,13 @@ def show_visualizations():
 
     # Bar chart - Top 5 Players by total win count
     if winners:
-        win_counts = Counter(winners)
-        top5 = win_counts.most_common(5)
+        win_counts: dict[str, int] = {}
+        for w in winners:
+            win_counts[w] = win_counts.get(w, 0) + 1
+        top5 = sorted(win_counts.items(), key=lambda x: x[1], reverse=True)[:5]
         names = [item[0] for item in top5]
         counts = [item[1] for item in top5]
         colors = [BLUE, GREEN, RED, ORANGE, PURPLE][:len(names)]
-        # Normalize colors to 0-1 range for matplotlib
         colors_norm = [(r/255, g/255, b/255) for r, g, b in colors]
         axes[0].bar(names, counts, color=colors_norm)
         axes[0].set_title("Top 5 Players by Wins")
@@ -123,7 +127,9 @@ def show_visualizations():
 
     # Pie chart - Most Played Games by frequency
     if games_played:
-        game_counts = Counter(games_played)
+        game_counts: dict[str, int] = {}
+        for gp in games_played:
+            game_counts[gp] = game_counts.get(gp, 0) + 1
         labels = list(game_counts.keys())
         sizes = list(game_counts.values())
         pie_colors = [(r/255, g/255, b/255) for r, g, b in
@@ -138,7 +144,6 @@ def show_visualizations():
     plt.savefig(str(SCRIPT_DIR / "stats.png"), dpi=100)
     plt.close()
 
-    # Display the saved chart image in pygame
     return str(SCRIPT_DIR / "stats.png")
 
 
@@ -345,6 +350,7 @@ def main():
     playing = True
     while playing:
         # Show game selection menu
+        pygame.event.clear()
         choice = game_menu(screen, player1, player2)
 
         if choice == "quit":
@@ -374,6 +380,7 @@ def main():
 
         # Post-game screen with stats
         if winner is not None:
+            pygame.event.clear()
             playing = post_game_screen(screen, winner, loser, choice)
         else:
             # Game was closed without finishing

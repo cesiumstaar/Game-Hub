@@ -44,7 +44,7 @@ register_user() {
     local hashed
     hashed=$(hash_password "$password")
     printf "%s\t%s\n" "$username" "$hashed" >> "$USERS_FILE"
-    echo "User '$username' registered successfully!"
+    echo "User '$username' registered successfully!" >&2
 }
 
 # Function to authenticate a single player
@@ -53,56 +53,56 @@ authenticate_player() {
     local other_username="$2"
     local username password hashed stored_hash
 
-    echo "========================================="
-    echo "  Player $player_num Authentication"
-    echo "========================================="
+    echo "=========================================" >&2
+    echo "  Player $player_num Authentication" >&2
+    echo "=========================================" >&2
 
     while true; do
-        read -p "Enter username for Player $player_num: " username
+        read -p "Enter username for Player $player_num: " username </dev/tty
 
         # Validate username is not empty
         if [ -z "$username" ]; then
-            echo "Username cannot be empty. Try again."
+            echo "Username cannot be empty. Try again." >&2
             continue
         fi
 
         # Ensure Player 2 has a different username than Player 1
         if [ -n "$other_username" ] && [ "$username" = "$other_username" ]; then
-            echo "This username is already logged in as Player 1. Please use a different username."
+            echo "This username is already logged in as Player 1. Please use a different username." >&2
             continue
         fi
 
         if user_exists "$username"; then
             # User exists - prompt for password and verify
             while true; do
-                read -sp "Enter password: " password
-                echo
+                read -sp "Enter password: " password </dev/tty
+                echo >&2
                 hashed=$(hash_password "$password")
                 stored_hash=$(get_stored_hash "$username")
 
                 if [ "$hashed" = "$stored_hash" ]; then
-                    echo "Login successful! Welcome back, $username."
+                    echo "Login successful! Welcome back, $username." >&2
                     echo "$username"
                     return 0
                 else
-                    echo "Incorrect password. Please try again."
+                    echo "Incorrect password. Please try again." >&2
                 fi
             done
         else
             # User doesn't exist - offer registration
-            read -p "Username '$username' not found. Register? (y/n): " choice
+            read -p "Username '$username' not found. Register? (y/n): " choice </dev/tty
             if [ "$choice" = "y" ] || [ "$choice" = "Y" ]; then
-                read -sp "Create a password: " password
-                echo
+                read -sp "Create a password: " password </dev/tty
+                echo >&2
                 if [ -z "$password" ]; then
-                    echo "Password cannot be empty. Try again."
+                    echo "Password cannot be empty. Try again." >&2
                     continue
                 fi
                 register_user "$username" "$password"
                 echo "$username"
                 return 0
             else
-                echo "Let's try again."
+                echo "Let's try again." >&2
             fi
         fi
     done
