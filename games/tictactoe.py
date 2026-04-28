@@ -36,10 +36,10 @@ class TicTacToe(BoardGame):
     MARK_PAD   = 12
     LINE_WIDTH = 2
 
-    def __init__(self, player1: str = "Player 1", player2: str = "Player 2", vs_ai: bool = False) -> None:
+    def __init__(self, player1: str = "Player 1", player2: str = "Player 2", vs_engine: bool = False) -> None:
         super().__init__(player1, player2, self.ROWS, self.COLS, "Tic-Tac-Toe 10x10")
         self._win_cells: list[tuple[int, int]] = []  # filled when someone wins
-        self.vs_ai = vs_ai
+        self.vs_engine = vs_engine
 
     # ── Win detection using NumPy sliding windows ────────────────────
 
@@ -120,48 +120,48 @@ class TicTacToe(BoardGame):
     def _is_draw(self) -> bool:
         return int(np.count_nonzero(self.board == 0)) == 0
 
-    # ── AI opponent (heuristic scoring) ──────────────────────────────
+    # ── Engine opponent (heuristic scoring) ─────────────────────────
 
-    def _ai_score_board(self) -> np.ndarray:
+    def _engine_score_board(self) -> np.ndarray:
         """Give each empty cell a score based on how useful it is.
         Higher weight = more urgent (e.g. completing 5 or blocking opponent)."""
         n = self.WIN_LENGTH
         scores = np.zeros((self.ROWS, self.COLS), dtype=np.float32)
 
-        # boolean masks for AI pieces, opponent pieces, empty cells
-        ai_mask = (self.board == -1).astype(np.int8)
+        # boolean masks for engine pieces, opponent pieces, empty cells
+        eng_mask = (self.board == -1).astype(np.int8)
         opp_mask = (self.board == 1).astype(np.int8)
         empty_mask = (self.board == 0).astype(np.int8)
 
-        def score_windows(windows_ai, windows_opp, windows_empty, coords):
+        def score_windows(windows_eng, windows_opp, windows_empty, coords):
             """Look at every 5-cell window and assign weights to empty cells."""
-            for idx in range(windows_ai.shape[0] * windows_ai.shape[1]):
-                r_start = idx // windows_ai.shape[1]
-                c_start = idx % windows_ai.shape[1]
+            for idx in range(windows_eng.shape[0] * windows_eng.shape[1]):
+                r_start = idx // windows_eng.shape[1]
+                c_start = idx % windows_eng.shape[1]
 
-                ai_count = windows_ai[r_start, c_start]
+                eng_count = windows_eng[r_start, c_start]
                 opp_count = windows_opp[r_start, c_start]
 
                 # window has pieces from both sides -- can't be completed by either
-                if ai_count > 0 and opp_count > 0:
+                if eng_count > 0 and opp_count > 0:
                     continue
 
                 # weight depends on how close to a winning/losing 5
-                if ai_count == 4 and opp_count == 0:
+                if eng_count == 4 and opp_count == 0:
                     weight = 10000   # can win right now
-                elif opp_count == 4 and ai_count == 0:
+                elif opp_count == 4 and eng_count == 0:
                     weight = 9000    # must block or we lose
-                elif ai_count == 3 and opp_count == 0:
+                elif eng_count == 3 and opp_count == 0:
                     weight = 100
-                elif opp_count == 3 and ai_count == 0:
+                elif opp_count == 3 and eng_count == 0:
                     weight = 80
-                elif ai_count == 2 and opp_count == 0:
+                elif eng_count == 2 and opp_count == 0:
                     weight = 10
-                elif opp_count == 2 and ai_count == 0:
+                elif opp_count == 2 and eng_count == 0:
                     weight = 8
-                elif ai_count == 1 and opp_count == 0:
+                elif eng_count == 1 and opp_count == 0:
                     weight = 1
-                elif opp_count == 1 and ai_count == 0:
+                elif opp_count == 1 and eng_count == 0:
                     weight = 1
                 else:
                     weight = 0
@@ -175,43 +175,43 @@ class TicTacToe(BoardGame):
 
         # check all four directions using sliding windows
         # horizontal
-        h_ai = np.lib.stride_tricks.sliding_window_view(ai_mask, n, axis=1).sum(axis=2)
+        h_eng = np.lib.stride_tricks.sliding_window_view(eng_mask, n, axis=1).sum(axis=2)
         h_opp = np.lib.stride_tricks.sliding_window_view(opp_mask, n, axis=1).sum(axis=2)
         h_empty = np.lib.stride_tricks.sliding_window_view(empty_mask, n, axis=1).sum(axis=2)
-        score_windows(h_ai, h_opp, h_empty, lambda r, c, k: (r, c + k))
+        score_windows(h_eng, h_opp, h_empty, lambda r, c, k: (r, c + k))
 
         # vertical
-        v_ai = np.lib.stride_tricks.sliding_window_view(ai_mask, n, axis=0).sum(axis=2)
+        v_eng = np.lib.stride_tricks.sliding_window_view(eng_mask, n, axis=0).sum(axis=2)
         v_opp = np.lib.stride_tricks.sliding_window_view(opp_mask, n, axis=0).sum(axis=2)
         v_empty = np.lib.stride_tricks.sliding_window_view(empty_mask, n, axis=0).sum(axis=2)
-        score_windows(v_ai, v_opp, v_empty, lambda r, c, k: (r + k, c))
+        score_windows(v_eng, v_opp, v_empty, lambda r, c, k: (r + k, c))
 
         # diagonal (\)
-        blocks_ai = np.lib.stride_tricks.sliding_window_view(ai_mask, (n, n))
+        blocks_eng = np.lib.stride_tricks.sliding_window_view(eng_mask, (n, n))
         blocks_opp = np.lib.stride_tricks.sliding_window_view(opp_mask, (n, n))
         blocks_empty = np.lib.stride_tricks.sliding_window_view(empty_mask, (n, n))
-        diag_ai = np.diagonal(blocks_ai, axis1=2, axis2=3).sum(axis=2)
+        diag_eng = np.diagonal(blocks_eng, axis1=2, axis2=3).sum(axis=2)
         diag_opp = np.diagonal(blocks_opp, axis1=2, axis2=3).sum(axis=2)
         diag_empty = np.diagonal(blocks_empty, axis1=2, axis2=3).sum(axis=2)
-        score_windows(diag_ai, diag_opp, diag_empty, lambda r, c, k: (r + k, c + k))
+        score_windows(diag_eng, diag_opp, diag_empty, lambda r, c, k: (r + k, c + k))
 
         # anti-diagonal (/)
-        ai_flip = np.fliplr(ai_mask)
+        eng_flip = np.fliplr(eng_mask)
         opp_flip = np.fliplr(opp_mask)
         empty_flip = np.fliplr(empty_mask)
-        blocks_ai_flip = np.lib.stride_tricks.sliding_window_view(ai_flip, (n, n))
+        blocks_eng_flip = np.lib.stride_tricks.sliding_window_view(eng_flip, (n, n))
         blocks_opp_flip = np.lib.stride_tricks.sliding_window_view(opp_flip, (n, n))
         blocks_empty_flip = np.lib.stride_tricks.sliding_window_view(empty_flip, (n, n))
-        anti_ai = np.diagonal(blocks_ai_flip, axis1=2, axis2=3).sum(axis=2)
+        anti_eng = np.diagonal(blocks_eng_flip, axis1=2, axis2=3).sum(axis=2)
         anti_opp = np.diagonal(blocks_opp_flip, axis1=2, axis2=3).sum(axis=2)
         anti_empty = np.diagonal(blocks_empty_flip, axis1=2, axis2=3).sum(axis=2)
-        score_windows(anti_ai, anti_opp, anti_empty, lambda r, c_flip, k: (r + k, self.COLS - 1 - c_flip - k))
+        score_windows(anti_eng, anti_opp, anti_empty, lambda r, c_flip, k: (r + k, self.COLS - 1 - c_flip - k))
 
         return scores
 
-    def ai_best_move(self) -> tuple[int, int]:
+    def engine_best_move(self) -> tuple[int, int]:
         """Pick the highest-scoring empty cell. Slightly prefer centre."""
-        scores = self._ai_score_board()
+        scores = self._engine_score_board()
 
         # nudge towards centre to break ties on empty boards
         centre_r, centre_c = self.ROWS // 2, self.COLS // 2
@@ -314,22 +314,22 @@ class TicTacToe(BoardGame):
         winner: int = 0
         draw: bool = False
         game_over: bool = False
-        ai_thinking = False
-        ai_think_start = 0
+        engine_thinking = False
+        engine_think_start = 0
 
         result: tuple[str, str] = ("draw", "draw")
 
         running = True
         while running:
-            # if it's AI's turn, start a short delay then auto-play
-            if self.vs_ai and self.current_player == 2 and not game_over and not ai_thinking:
-                ai_thinking = True
-                ai_think_start = pygame.time.get_ticks()
+            # if it's the engine's turn, start a short delay then auto-play
+            if self.vs_engine and self.current_player == 2 and not game_over and not engine_thinking:
+                engine_thinking = True
+                engine_think_start = pygame.time.get_ticks()
 
-            if ai_thinking and pygame.time.get_ticks() - ai_think_start >= 400:
-                ai_thinking = False
-                r, c = self.ai_best_move()
-                self.board[r, c] = -1  # place AI's mark
+            if engine_thinking and pygame.time.get_ticks() - engine_think_start >= 400:
+                engine_thinking = False
+                r, c = self.engine_best_move()
+                self.board[r, c] = -1  # place engine's mark
 
                 winner = self.check_win()
                 if winner:
@@ -359,8 +359,8 @@ class TicTacToe(BoardGame):
                     break
 
                 if event.type == pygame.MOUSEBUTTONDOWN and not game_over:
-                    # in AI mode, ignore clicks when it's not the human's turn
-                    if self.vs_ai and self.current_player != 1:
+                    # in engine mode, ignore clicks when it's not the human's turn
+                    if self.vs_engine and self.current_player != 1:
                         continue
 
                     cell = self._cell_from_pixel(*event.pos)
@@ -399,7 +399,7 @@ class TicTacToe(BoardGame):
                 msg = f"{result[0]} wins!" if winner else "It's a draw!"
                 self._draw_status(screen, msg)
                 self._draw_game_over_dialog(screen, msg)
-            elif ai_thinking:
+            elif engine_thinking:
                 self._draw_status(screen, f"{self.get_current_player_name()} is thinking...")
             else:
                 turn_label = "(X)" if self.current_player == 1 else "(O)"

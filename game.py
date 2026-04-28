@@ -144,8 +144,8 @@ def draw_text(screen, text, x, y, font, color=BLACK, center=False):
     return rect
 
 
-def ai_player_select(screen, player1: str, player2: str):
-    """Show selection screen for which player challenges the AI.
+def engine_player_select(screen, player1: str, player2: str):
+    """Show selection screen for which player challenges the engine.
     Returns chosen player name or None if cancelled."""
     clock = pygame.time.Clock()
     title_font = pygame.font.SysFont("Arial", 36, bold=True)
@@ -159,7 +159,7 @@ def ai_player_select(screen, player1: str, player2: str):
         mouse_pos = pygame.mouse.get_pos()
         screen.fill(WHITE)
 
-        draw_text(screen, "Tic-Tac-Toe vs AI", SCREEN_WIDTH // 2, 80, title_font, PURPLE, center=True)
+        draw_text(screen, "Tic-Tac-Toe vs Engine", SCREEN_WIDTH // 2, 80, title_font, PURPLE, center=True)
         draw_text(screen, "Who wants to challenge the Computer?", SCREEN_WIDTH // 2, 140, subtitle_font, DARK_GRAY, center=True)
 
         btn_rects = []
@@ -213,7 +213,7 @@ def game_menu(screen, player1: str, player2: str):
 
     games = [
         {"name": "Tic-Tac-Toe", "desc": "10x10 board, 5 in a row", "color": BLUE},
-        {"name": "Tic-Tac-Toe vs AI", "desc": "Challenge the computer!", "color": PURPLE},
+        {"name": "Tic-Tac-Toe vs Engine", "desc": "Challenge the computer!", "color": PURPLE},
         {"name": "Othello", "desc": "8x8 Reversi board", "color": GREEN},
         {"name": "Connect Four", "desc": "7x7 grid, 4 in a row", "color": RED},
     ]
@@ -374,14 +374,14 @@ def main():
         game_record_name = choice
 
         if choice == "Tic-Tac-Toe":
-            game = TicTacToe(player1, player2, vs_ai=False)
+            game = TicTacToe(player1, player2, vs_engine=False)
             winner, loser = game.run()
-        elif choice == "Tic-Tac-Toe vs AI":
+        elif choice == "Tic-Tac-Toe vs Engine":
             pygame.event.clear()
-            chosen_player = ai_player_select(screen, player1, player2)
+            chosen_player = engine_player_select(screen, player1, player2)
             if chosen_player is None:
                 continue
-            game = TicTacToe(chosen_player, "Computer", vs_ai=True)
+            game = TicTacToe(chosen_player, "Computer", vs_engine=True)
             winner, loser = game.run()
             game_record_name = "Tic-Tac-Toe"
         elif choice == "Othello":
