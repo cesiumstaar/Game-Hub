@@ -20,30 +20,38 @@ if [ "$TOTAL_GAMES" -eq 0 ]; then
 fi
 
 echo ""
-echo "============================================================"
-echo "                    LEADERBOARD"
-echo "============================================================"
+echo "╔══════════════════════════════════════════════════╗"
+echo "║               LEADERBOARD                       ║"
+echo "╠══════════════════════════════════════════════════╣"
 echo ""
 
-# Extract unique players from both Winner and Loser columns (skip draws)
+# Extract unique players (skip "draw")
 PLAYERS=$(tail -n +2 "$HISTORY_FILE" | awk -F',' '{
     if ($1 != "draw") print $1;
     if ($2 != "draw") print $2;
 }' | sort -u)
 
-# Extract unique game names
-GAMES=$(tail -n +2 "$HISTORY_FILE" | awk -F',' '{print $4}' | sort -u)
+# Extract unique game names (field 4 may contain spaces — read full field)
+GAMES_FILE=$(mktemp)
+tail -n +2 "$HISTORY_FILE" | awk -F',' '{print $4}' | sort -u > "$GAMES_FILE"
 
-# Print header
-printf "%-15s" "Player"
-for game in $GAMES; do
-    printf "| %-12s %-12s %-10s" "${game}-W" "${game}-L" "${game}-R"
-done
-printf "| %-8s %-8s %-8s\n" "Total-W" "Total-L" "Total-R"
+# Build header
+printf "  %-14s" "Player"
+while IFS= read -r game; do
+    printf "│ %-6s %-6s %-6s " "W" "L" "W/L"
+done < "$GAMES_FILE"
+printf "│ %-6s %-6s %-6s\n" "Tot-W" "Tot-L" "Tot-R"
 
-# Print separator line
-SEP_LEN=$((15 + $(echo "$GAMES" | wc -w | tr -d ' ') * 37 + 27))
-printf '%*s\n' "$SEP_LEN" '' | tr ' ' '-'
+# Separator
+printf "  "
+printf '%.0s─' {1..14}
+while IFS= read -r game; do
+    printf "┼"
+    printf '%.0s─' {1..22}
+done < "$GAMES_FILE"
+printf "┼"
+printf '%.0s─' {1..22}
+printf "\n"
 
 # Temporary file for sorting
 TEMP_FILE=$(mktemp)
@@ -54,7 +62,7 @@ for player in $PLAYERS; do
     TOTAL_LOSSES=0
     LINE=""
 
-    for game in $GAMES; do
+    while IFS= read -r game; do
         # Count wins for this player in this game
         WINS=$(tail -n +2 "$HISTORY_FILE" | awk -F',' -v p="$player" -v g="$game" \
             '$1==p && $4==g {count++} END {print count+0}')
@@ -73,10 +81,10 @@ for player in $PLAYERS; do
             RATIO=$(awk "BEGIN {printf \"%.2f\", $WINS/$LOSSES}")
         fi
 
-        LINE="${LINE}$(printf "| %-12s %-12s %-10s" "$WINS" "$LOSSES" "$RATIO")"
+        LINE="${LINE}$(printf "│ %-6s %-6s %-6s " "$WINS" "$LOSSES" "$RATIO")"
         TOTAL_WINS=$((TOTAL_WINS + WINS))
         TOTAL_LOSSES=$((TOTAL_LOSSES + LOSSES))
-    done
+    done < "$GAMES_FILE"
 
     # Calculate total ratio
     if [ "$TOTAL_LOSSES" -eq 0 ]; then
@@ -89,7 +97,7 @@ for player in $PLAYERS; do
         TOTAL_RATIO=$(awk "BEGIN {printf \"%.2f\", $TOTAL_WINS/$TOTAL_LOSSES}")
     fi
 
-    TOTAL_PART=$(printf "| %-8s %-8s %-8s" "$TOTAL_WINS" "$TOTAL_LOSSES" "$TOTAL_RATIO")
+    TOTAL_PART=$(printf "│ %-6s %-6s %-6s" "$TOTAL_WINS" "$TOTAL_LOSSES" "$TOTAL_RATIO")
 
     # Store with sort key for later sorting
     case "$SORT_METRIC" in
@@ -111,8 +119,26 @@ for player in $PLAYERS; do
             ;;
     esac
 
-    echo "${SORT_KEY}|$(printf "%-15s" "$player")${LINE}${TOTAL_PART}" >> "$TEMP_FILE"
+    echo "${SORT_KEY}|$(printf "  %-14s" "$player")${LINE}${TOTAL_PART}" >> "$TEMP_FILE"
 done
+
+# Print game name sub-header
+printf "  %-14s" ""
+while IFS= read -r game; do
+    printf "│ %-20s " "$game"
+done < "$GAMES_FILE"
+printf "│ %-20s\n" "TOTAL"
+
+# Separator
+printf "  "
+printf '%.0s─' {1..14}
+while IFS= read -r game; do
+    printf "┼"
+    printf '%.0s─' {1..22}
+done < "$GAMES_FILE"
+printf "┼"
+printf '%.0s─' {1..22}
+printf "\n"
 
 # Sort and display (descending order)
 sort -t'|' -k1 -rn "$TEMP_FILE" | while IFS='|' read -r key rest; do
@@ -120,10 +146,10 @@ sort -t'|' -k1 -rn "$TEMP_FILE" | while IFS='|' read -r key rest; do
 done
 
 # Cleanup
-rm -f "$TEMP_FILE"
+rm -f "$TEMP_FILE" "$GAMES_FILE"
 
 echo ""
-echo "------------------------------------------------------------"
+echo "╠══════════════════════════════════════════════════╣"
 echo "  Sorted by: $SORT_METRIC | Total games played: $TOTAL_GAMES"
-echo "============================================================"
+echo "╚══════════════════════════════════════════════════╝"
 echo ""
