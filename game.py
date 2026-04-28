@@ -277,6 +277,62 @@ def draw_stat_card(
         draw_text(screen, _short_label(subtitle, 22), rect.centerx, rect.y + 73, sub_font, DARK_GRAY, center=True)
 
 
+def engine_player_select(screen, player1: str, player2: str):
+    """Let one of the two players choose to challenge the computer."""
+    clock = pygame.time.Clock()
+    title_font = pygame.font.SysFont("Arial", 36, bold=True)
+    subtitle_font = pygame.font.SysFont("Arial", 22)
+    button_font = pygame.font.SysFont("Arial", 26, bold=True)
+    small_font = pygame.font.SysFont("Arial", 18)
+
+    players = [player1, player2]
+
+    while True:
+        mouse_pos = pygame.mouse.get_pos()
+        screen.fill(WHITE)
+
+        draw_text(screen, "Tic-Tac-Toe vs Engine", SCREEN_WIDTH // 2, 80, title_font, PURPLE, center=True)
+        draw_text(screen, "Who wants to challenge the Computer?", SCREEN_WIDTH // 2, 140, subtitle_font, DARK_GRAY, center=True)
+
+        btn_rects = []
+        for i, name in enumerate(players):
+            btn_y = 230 + i * 110
+            btn_rect = pygame.Rect(150, btn_y, 400, 80)
+            btn_rects.append((btn_rect, name))
+
+            if btn_rect.collidepoint(mouse_pos):
+                pygame.draw.rect(screen, PURPLE, btn_rect, border_radius=12)
+                draw_text(screen, name, SCREEN_WIDTH // 2, btn_y + 28, button_font, WHITE, center=True)
+                draw_text(screen, f"{name} vs Computer", SCREEN_WIDTH // 2, btn_y + 58, small_font, WHITE, center=True)
+            else:
+                pygame.draw.rect(screen, PURPLE, btn_rect, width=3, border_radius=12)
+                draw_text(screen, name, SCREEN_WIDTH // 2, btn_y + 28, button_font, PURPLE, center=True)
+                draw_text(screen, f"{name} vs Computer", SCREEN_WIDTH // 2, btn_y + 58, small_font, DARK_GRAY, center=True)
+
+        back_rect = pygame.Rect(250, 480, 200, 45)
+        if back_rect.collidepoint(mouse_pos):
+            pygame.draw.rect(screen, RED, back_rect, border_radius=8)
+            draw_text(screen, "Back", SCREEN_WIDTH // 2, 502, button_font, WHITE, center=True)
+        else:
+            pygame.draw.rect(screen, RED, back_rect, width=2, border_radius=8)
+            draw_text(screen, "Back", SCREEN_WIDTH // 2, 502, button_font, RED, center=True)
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                return None
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                for rect, name in btn_rects:
+                    if rect.collidepoint(event.pos):
+                        return name
+                if back_rect.collidepoint(event.pos):
+                    return None
+
+
 def game_menu(screen, player1: str, player2: str):
     """
     Display the game selection menu with Pygame GUI.
@@ -291,6 +347,7 @@ def game_menu(screen, player1: str, player2: str):
     # Define game buttons
     games = [
         {"name": "Tic-Tac-Toe", "desc": "10x10 board, 5 in a row", "color": BLUE},
+        {"name": "Tic-Tac-Toe vs Engine", "desc": "Challenge the computer!", "color": PURPLE},
         {"name": "Othello", "desc": "8x8 Reversi board", "color": GREEN},
         {"name": "Connect Four", "desc": "7x7 grid, 4 in a row", "color": RED},
     ]
@@ -312,42 +369,42 @@ def game_menu(screen, player1: str, player2: str):
         # Game buttons
         button_rects = []
         for i, game in enumerate(games):
-            btn_y = 180 + i * 100
-            btn_rect = pygame.Rect(150, btn_y, 400, 75)
+            btn_y = 150 + i * 85
+            btn_rect = pygame.Rect(150, btn_y, 400, 70)
             button_rects.append((btn_rect, game["name"]))
 
             # Hover effect
             if btn_rect.collidepoint(mouse_pos):
                 pygame.draw.rect(screen, game["color"], btn_rect, border_radius=12)
-                draw_text(screen, game["name"], SCREEN_WIDTH // 2, btn_y + 25, button_font, WHITE, center=True)
-                draw_text(screen, game["desc"], SCREEN_WIDTH // 2, btn_y + 55, small_font, WHITE, center=True)
+                draw_text(screen, game["name"], SCREEN_WIDTH // 2, btn_y + 22, button_font, WHITE, center=True)
+                draw_text(screen, game["desc"], SCREEN_WIDTH // 2, btn_y + 50, small_font, WHITE, center=True)
             else:
                 pygame.draw.rect(screen, game["color"], btn_rect, width=3, border_radius=12)
-                draw_text(screen, game["name"], SCREEN_WIDTH // 2, btn_y + 25, button_font, game["color"], center=True)
-                draw_text(screen, game["desc"], SCREEN_WIDTH // 2, btn_y + 55, small_font, DARK_GRAY, center=True)
+                draw_text(screen, game["name"], SCREEN_WIDTH // 2, btn_y + 22, button_font, game["color"], center=True)
+                draw_text(screen, game["desc"], SCREEN_WIDTH // 2, btn_y + 50, small_font, DARK_GRAY, center=True)
 
         # Leaderboard sort buttons
-        draw_text(screen, "View Leaderboard:", SCREEN_WIDTH // 2, 500, subtitle_font, DARK_GRAY, center=True)
+        draw_text(screen, "View Leaderboard:", SCREEN_WIDTH // 2, 505, subtitle_font, DARK_GRAY, center=True)
         sort_rects = []
         for i, (opt, label) in enumerate(zip(sort_options, sort_labels)):
             sx = 100 + i * 200
-            sr = pygame.Rect(sx, 525, 170, 35)
+            sr = pygame.Rect(sx, 530, 170, 35)
             sort_rects.append((sr, opt))
             if sr.collidepoint(mouse_pos):
                 pygame.draw.rect(screen, TEAL, sr, border_radius=8)
-                draw_text(screen, label, sx + 85, 542, small_font, WHITE, center=True)
+                draw_text(screen, label, sx + 85, 547, small_font, WHITE, center=True)
             else:
                 pygame.draw.rect(screen, TEAL, sr, width=2, border_radius=8)
-                draw_text(screen, label, sx + 85, 542, small_font, TEAL, center=True)
+                draw_text(screen, label, sx + 85, 547, small_font, TEAL, center=True)
 
         # Quit button
-        quit_rect = pygame.Rect(280, 575, 140, 40)
+        quit_rect = pygame.Rect(280, 580, 140, 40)
         if quit_rect.collidepoint(mouse_pos):
             pygame.draw.rect(screen, RED, quit_rect, border_radius=8)
-            draw_text(screen, "Quit", SCREEN_WIDTH // 2, 595, button_font, WHITE, center=True)
+            draw_text(screen, "Quit", SCREEN_WIDTH // 2, 600, button_font, WHITE, center=True)
         else:
             pygame.draw.rect(screen, RED, quit_rect, width=2, border_radius=8)
-            draw_text(screen, "Quit", SCREEN_WIDTH // 2, 595, button_font, RED, center=True)
+            draw_text(screen, "Quit", SCREEN_WIDTH // 2, 600, button_font, RED, center=True)
 
         pygame.display.flip()
         clock.tick(FPS)
@@ -535,11 +592,20 @@ def main():
         if choice == "quit":
             break
 
-        # Launch the selected game
         winner, loser = None, None
+        game_record_name = choice
+
         if choice == "Tic-Tac-Toe":
-            game = TicTacToe(player1, player2)
+            game = TicTacToe(player1, player2, vs_engine=False)
             winner, loser = game.run()
+        elif choice == "Tic-Tac-Toe vs Engine":
+            pygame.event.clear()
+            chosen_player = engine_player_select(screen, player1, player2)
+            if chosen_player is None:
+                continue
+            game = TicTacToe(chosen_player, "Computer", vs_engine=True)
+            winner, loser = game.run()
+            game_record_name = "Tic-Tac-Toe"
         elif choice == "Othello":
             game = Othello(player1, player2)
             winner, loser = game.run()
@@ -549,7 +615,7 @@ def main():
 
         # Record the result if a game was played
         if winner is not None:
-            record_result(winner, loser, choice)
+            record_result(winner, loser, game_record_name)
             # Call leaderboard in terminal
             call_leaderboard("wins")
 
@@ -560,7 +626,7 @@ def main():
         # Post-game screen with stats
         if winner is not None:
             pygame.event.clear()
-            playing = post_game_screen(screen, winner, loser, choice)
+            playing = post_game_screen(screen, winner, loser, game_record_name)
         else:
             # Game was closed without finishing
             playing = False
