@@ -49,6 +49,8 @@ class TicTacToe(BoardGame):
     CELL_PX    = BOARD_PX // COLS   # 70 px per cell
     MARK_PAD   = 12           # padding inside a cell for drawing marks
     LINE_WIDTH = 2            # grid line thickness
+    UNDO_W     = 96
+    UNDO_H     = 34
 
     def __init__(self, player1: str = "Player 1", player2: str = "Player 2") -> None:
         # Initialise the base class with a 10x10 board
@@ -239,10 +241,37 @@ class TicTacToe(BoardGame):
         """Render a one-line status message in the bar below the board."""
         font = pygame.font.SysFont("arial", 24)
         label = font.render(text, True, BLACK)
-        # Centre the text horizontally in the status bar
-        x = (self.WINDOW_W - label.get_width()) // 2
+        # Leave space for the undo button on the right side of the bar.
+        x = max(12, (self._undo_button_rect().left - label.get_width()) // 2)
         y = self.BOARD_PX + (self.STATUS_H - label.get_height()) // 2
         surface.blit(label, (x, y))
+
+    def _undo_button_rect(self) -> pygame.Rect:
+        """Return the fixed rectangle used for the one-step undo button."""
+        return pygame.Rect(
+            self.WINDOW_W - self.UNDO_W - 14,
+            self.BOARD_PX + (self.STATUS_H - self.UNDO_H) // 2,
+            self.UNDO_W,
+            self.UNDO_H,
+        )
+
+    def _draw_undo_button(self, surface: pygame.Surface, enabled: bool) -> None:
+        """Draw the one-step undo button in the status bar."""
+        rect = self._undo_button_rect()
+        fill = BLUE if enabled else (220, 220, 220)
+        text_colour = WHITE if enabled else (110, 110, 110)
+        pygame.draw.rect(surface, fill, rect, border_radius=8)
+        pygame.draw.rect(surface, BLACK, rect, width=2, border_radius=8)
+
+        font = pygame.font.SysFont("arial", 18, bold=True)
+        label = font.render("Undo", True, text_colour)
+        surface.blit(
+            label,
+            (
+                rect.x + (rect.width - label.get_width()) // 2,
+                rect.y + (rect.height - label.get_height()) // 2,
+            ),
+        )
 
     def _draw_game_over_dialog(self, surface: pygame.Surface, message: str) -> None:
         """Draw a centred dialog box announcing the game result."""
@@ -309,6 +338,20 @@ class TicTacToe(BoardGame):
 
         # Result strings built at the end
         result: tuple[str, str] = ("draw", "draw")
+        undo_rect = self._undo_button_rect()
+
+        def undo_last_move() -> bool:
+            nonlocal winner, draw, game_over, result
+            state = self.restore_undo_state()
+            if state is None:
+                return False
+
+            winner = int(state["winner"])
+            draw = bool(state["draw"])
+            game_over = bool(state["game_over"])
+            result = state["result"]
+            self._win_cells = list(state["win_cells"])
+            return True
 
         running = True
         while running:
@@ -322,6 +365,13 @@ class TicTacToe(BoardGame):
                     if event.key == pygame.K_q:
                         running = False
                         break
+                    if event.key == pygame.K_u and undo_last_move():
+                        continue
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if undo_rect.collidepoint(event.pos):
+                        undo_last_move()
+                        continue
 
                 # Any click or key dismisses the game-over dialog
                 if game_over and event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
@@ -337,6 +387,14 @@ class TicTacToe(BoardGame):
                     # Only allow placement on empty cells
                     if self.board[r, c] != 0:
                         continue
+
+                    self.remember_undo_state(
+                        winner=winner,
+                        draw=draw,
+                        game_over=game_over,
+                        result=result,
+                        win_cells=list(self._win_cells),
+                    )
 
                     # Place the mark: +1 for player 1, -1 for player 2
                     self.board[r, c] = 1 if self.current_player == 1 else -1
@@ -377,6 +435,7 @@ class TicTacToe(BoardGame):
                 # Show whose turn it is
                 self._draw_status(screen, f"{self.get_current_player_name()}'s turn  (X)" if self.current_player == 1 else f"{self.get_current_player_name()}'s turn  (O)")
 
+            self._draw_undo_button(screen, self.has_undo())
             pygame.display.flip()
             clock.tick(30)  # cap at 30 FPS -- plenty for a board game
 

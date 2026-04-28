@@ -40,6 +40,8 @@ BG_COLOUR = (30, 30, 30)            # window background behind the board
 
 FPS = 60                             # frame-rate cap
 DROP_SPEED = 18                      # pixels per frame during coin-drop animation
+UNDO_W = 96
+UNDO_H = 34
 
 
 class ConnectFour(BoardGame):
@@ -164,10 +166,37 @@ class ConnectFour(BoardGame):
         """Render a one-line status message beneath the board."""
         font = pygame.font.SysFont("arial", 26, bold=True)
         label = font.render(text, True, WHITE)
-        # Centre the text in the status bar area
-        x = (WIN_WIDTH - label.get_width()) // 2
+        # Leave room for the undo button on the right.
+        x = max(12, (self._undo_button_rect().left - label.get_width()) // 2)
         y = TOP_MARGIN + BOARD_HEIGHT + (STATUS_BAR - label.get_height()) // 2
         surface.blit(label, (x, y))
+
+    def _undo_button_rect(self) -> pygame.Rect:
+        """Return the fixed rectangle used for the one-step undo button."""
+        return pygame.Rect(
+            WIN_WIDTH - UNDO_W - 14,
+            TOP_MARGIN + BOARD_HEIGHT + (STATUS_BAR - UNDO_H) // 2,
+            UNDO_W,
+            UNDO_H,
+        )
+
+    def _draw_undo_button(self, surface: pygame.Surface, enabled: bool) -> None:
+        """Draw the one-step undo button in the status bar."""
+        rect = self._undo_button_rect()
+        fill = YELLOW if enabled else (95, 95, 95)
+        text_colour = BLACK if enabled else (180, 180, 180)
+        pygame.draw.rect(surface, fill, rect, border_radius=8)
+        pygame.draw.rect(surface, WHITE, rect, width=2, border_radius=8)
+
+        font = pygame.font.SysFont("arial", 18, bold=True)
+        label = font.render("Undo", True, text_colour)
+        surface.blit(
+            label,
+            (
+                rect.x + (rect.width - label.get_width()) // 2,
+                rect.y + (rect.height - label.get_height()) // 2,
+            ),
+        )
 
     # ── coin-drop animation ───────────────────────────────────────────
 
@@ -231,6 +260,18 @@ class ConnectFour(BoardGame):
         game_over = False
         result: tuple[str, str] = ("draw", "draw")
         hover_col = -1                     # column the mouse is hovering over
+        undo_rect = self._undo_button_rect()
+
+        def undo_last_move() -> bool:
+            nonlocal game_over, result, hover_col
+            state = self.restore_undo_state()
+            if state is None:
+                return False
+
+            game_over = bool(state["game_over"])
+            result = state["result"]
+            hover_col = int(state["hover_col"])
+            return True
 
         # ---- event loop ------------------------------------------------------
         running = True
@@ -241,17 +282,25 @@ class ConnectFour(BoardGame):
                     running = False
                     break
 
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_u and undo_last_move():
+                        continue
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
+                        break
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if undo_rect.collidepoint(event.pos):
+                        undo_last_move()
+                        continue
+
                 # Any click or key dismisses the game-over screen
                 if game_over and event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                     running = False
                     break
 
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    running = False
-                    break
-
                 # Track which column the mouse is over (for the hover indicator)
-                if event.type == pygame.MOUSEMOVE:
+                if event.type == pygame.MOUSEMOTION:
                     hover_col = event.pos[0] // CELL_SIZE
 
                 # Process a click only while the game is still active
@@ -263,6 +312,11 @@ class ConnectFour(BoardGame):
                             continue  # column full -- ignore click
 
                         player = self.current_player
+                        self.remember_undo_state(
+                            game_over=game_over,
+                            result=result,
+                            hover_col=hover_col,
+                        )
 
                         # Animate the coin falling, then finalise the placement
                         self._animate_drop(surface, clock, col, row, player)
@@ -305,6 +359,7 @@ class ConnectFour(BoardGame):
                     surface, f"{self.get_current_player_name()}'s turn"
                 )
 
+            self._draw_undo_button(surface, self.has_undo())
             pygame.display.flip()
             clock.tick(FPS)
 

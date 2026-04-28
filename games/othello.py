@@ -49,6 +49,8 @@ class Othello(BoardGame):
     INFO_HEIGHT  = 110                 # space below the board for scores / status
     WIN_W        = BOARD_PX + 2 * MARGIN       # ~700
     WIN_H        = BOARD_PX + 2 * MARGIN + INFO_HEIGHT  # ~750
+    UNDO_W       = 96
+    UNDO_H       = 36
 
     # ------------------------------------------------------------------ init
     def __init__(self, player1: str, player2: str) -> None:
@@ -201,7 +203,41 @@ class Othello(BoardGame):
             cy = my + r * self.CELL_SIZE + self.CELL_SIZE // 2
             pygame.draw.circle(surface, HINT_COLOUR[:3], (cx, cy), dot_radius)
 
-    def _draw_info(self, surface: pygame.Surface, valid_moves: dict, game_over: bool, winner: int) -> None:
+    def _undo_button_rect(self) -> pygame.Rect:
+        """Return the fixed rectangle used for the one-step undo button."""
+        return pygame.Rect(
+            self.WIN_W - self.UNDO_W - self.MARGIN,
+            self.WIN_H - self.UNDO_H - 14,
+            self.UNDO_W,
+            self.UNDO_H,
+        )
+
+    def _draw_undo_button(self, surface: pygame.Surface, enabled: bool) -> None:
+        """Draw the one-step undo button in the lower-right info area."""
+        rect = self._undo_button_rect()
+        fill = (76, 175, 80) if enabled else (105, 105, 105)
+        text_colour = WHITE_DISC if enabled else (200, 200, 200)
+        pygame.draw.rect(surface, fill, rect, border_radius=8)
+        pygame.draw.rect(surface, TEXT_COLOUR, rect, width=2, border_radius=8)
+
+        font = pygame.font.SysFont("Arial", 18, bold=True)
+        label = font.render("Undo", True, text_colour)
+        surface.blit(
+            label,
+            (
+                rect.x + (rect.width - label.get_width()) // 2,
+                rect.y + (rect.height - label.get_height()) // 2,
+            ),
+        )
+
+    def _draw_info(
+        self,
+        surface: pygame.Surface,
+        valid_moves: dict,
+        game_over: bool,
+        winner: int,
+        undo_enabled: bool,
+    ) -> None:
         """Draw the score bar and status text below the board."""
         font_big   = pygame.font.SysFont("Arial", 28, bold=True)
         font_small = pygame.font.SysFont("Arial", 22)
@@ -244,8 +280,9 @@ class Othello(BoardGame):
                 status_text = f"{name} ({colour_label}) has no moves -- skipping"
 
         status_surf = font_small.render(status_text, True, TEXT_COLOUR)
-        sx = (self.WIN_W - status_surf.get_width()) // 2
+        sx = max(12, (self._undo_button_rect().left - status_surf.get_width()) // 2)
         surface.blit(status_surf, (sx, info_y + 66))
+        self._draw_undo_button(surface, undo_enabled)
 
     # ------------------------------------------------------------ main loop
 
@@ -264,6 +301,18 @@ class Othello(BoardGame):
         game_over = False
         winner = 0          # 0 = ongoing, 1 / 2 = winner, -1 = draw
         skip_delay = 0      # countdown frames when a turn is auto-skipped
+        undo_rect = self._undo_button_rect()
+
+        def undo_last_move() -> bool:
+            nonlocal game_over, winner, skip_delay
+            state = self.restore_undo_state()
+            if state is None:
+                return False
+
+            game_over = bool(state["game_over"])
+            winner = int(state["winner"])
+            skip_delay = int(state["skip_delay"])
+            return True
 
         running = True
         while running:
@@ -276,9 +325,17 @@ class Othello(BoardGame):
                     running = False
                     break
 
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    running = False
-                    break
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_u and undo_last_move():
+                        continue
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
+                        break
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    if undo_rect.collidepoint(event.pos):
+                        undo_last_move()
+                        continue
 
                 # Any key or click after game over returns to menu
                 if game_over and event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
@@ -297,6 +354,11 @@ class Othello(BoardGame):
                     # Bounds check
                     if 0 <= row < self.BOARD_SIZE and 0 <= col < self.BOARD_SIZE:
                         if (row, col) in valid_moves:
+                            self.remember_undo_state(
+                                game_over=game_over,
+                                winner=winner,
+                                skip_delay=skip_delay,
+                            )
                             self.make_move(row, col)
 
                             # Check whether the game has ended
@@ -335,7 +397,7 @@ class Othello(BoardGame):
             if not game_over and skip_delay == 0:
                 self._draw_hints(screen, valid_moves)
 
-            self._draw_info(screen, valid_moves, game_over, winner)
+            self._draw_info(screen, valid_moves, game_over, winner, self.has_undo())
             pygame.display.flip()
             clock.tick(60)
 

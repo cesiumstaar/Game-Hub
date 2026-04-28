@@ -78,17 +78,24 @@ def call_leaderboard(sort_metric: str = "wins"):
             print(f"Error calling leaderboard: {e}")
 
 
-def show_visualizations():
-    """Display Matplotlib charts: top 5 players bar chart and most played games pie chart."""
-    if not HISTORY_FILE.exists():
-        return
+def _short_label(text: str, max_len: int = 16) -> str:
+    """Shorten long labels so they stay readable in charts and stat cards."""
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3] + "..."
 
-    # Read history data using plain file I/O (no csv module)
+
+def load_stats_data() -> dict[str, object] | None:
+    """Load history.csv and return aggregated winner/game statistics."""
+    if not HISTORY_FILE.exists():
+        return None
+
     winners = []
     games_played = []
     with open(HISTORY_FILE, "r") as f:
         lines = f.read().splitlines()
-    for line in lines[1:]:          # skip header row
+
+    for line in lines[1:]:  # skip header row
         if not line.strip():
             continue
         parts = line.split(",")
@@ -101,47 +108,136 @@ def show_visualizations():
         games_played.append(game_val)
 
     if not winners and not games_played:
-        return
+        return None
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    fig.suptitle("Game Hub Statistics", fontsize=16, fontweight="bold")
+    win_counts: dict[str, int] = {}
+    for w in winners:
+        win_counts[w] = win_counts.get(w, 0) + 1
 
-    # Bar chart - Top 5 Players by total win count
+    game_counts: dict[str, int] = {}
+    for gp in games_played:
+        game_counts[gp] = game_counts.get(gp, 0) + 1
+
+    return {
+        "winners": winners,
+        "games_played": games_played,
+        "win_counts": win_counts,
+        "game_counts": game_counts,
+    }
+
+
+def show_visualizations(stats_data: dict[str, object] | None = None):
+    """Create a compact, post-game-friendly statistics image."""
+    stats_data = stats_data or load_stats_data()
+    if not stats_data:
+        return None
+
+    winners = stats_data["winners"]
+    games_played = stats_data["games_played"]
+    win_counts = stats_data["win_counts"]
+    game_counts = stats_data["game_counts"]
+
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=(10.5, 4.1),
+        dpi=140,
+        constrained_layout=True,
+    )
+    fig.patch.set_facecolor("white")
+
+    for ax in axes:
+        ax.set_facecolor("#fafafa")
+
     if winners:
-        win_counts: dict[str, int] = {}
-        for w in winners:
-            win_counts[w] = win_counts.get(w, 0) + 1
-        top5 = sorted(win_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-        names = [item[0] for item in top5]
+        top5 = sorted(win_counts.items(), key=lambda x: (-x[1], x[0]))[:5]
+        top5.reverse()
+        names = [_short_label(item[0], 14) for item in top5]
         counts = [item[1] for item in top5]
         colors = [BLUE, GREEN, RED, ORANGE, PURPLE][:len(names)]
+        colors.reverse()
         colors_norm = [(r/255, g/255, b/255) for r, g, b in colors]
-        axes[0].bar(names, counts, color=colors_norm)
-        axes[0].set_title("Top 5 Players by Wins")
-        axes[0].set_xlabel("Player")
-        axes[0].set_ylabel("Wins")
-        axes[0].set_ylim(bottom=0)
+        bars = axes[0].barh(names, counts, color=colors_norm)
+        for bar, count in zip(bars, counts):
+            axes[0].text(
+                bar.get_width() + 0.08,
+                bar.get_y() + bar.get_height() / 2,
+                str(count),
+                va="center",
+                fontsize=10,
+                color="#2f2f2f",
+                fontweight="bold",
+            )
+        axes[0].set_title("Top Winners", fontsize=12, fontweight="bold")
+        axes[0].set_xlabel("Wins", fontsize=10)
+        axes[0].tick_params(axis="both", labelsize=10)
+        axes[0].grid(axis="x", linestyle="--", alpha=0.25)
+        axes[0].set_axisbelow(True)
+        axes[0].set_xlim(0, max(counts) + max(1, int(max(counts) * 0.35)))
+        axes[0].spines["top"].set_visible(False)
+        axes[0].spines["right"].set_visible(False)
     else:
-        axes[0].text(0.5, 0.5, "No wins recorded yet", ha="center", va="center")
-        axes[0].set_title("Top 5 Players by Wins")
+        axes[0].text(
+            0.5,
+            0.5,
+            "No wins recorded yet",
+            ha="center",
+            va="center",
+            fontsize=12,
+            color="#4a4a4a",
+        )
+        axes[0].set_title("Top Winners", fontsize=12, fontweight="bold")
+        axes[0].set_xticks([])
+        axes[0].set_yticks([])
 
-    # Pie chart - Most Played Games by frequency
     if games_played:
-        game_counts: dict[str, int] = {}
-        for gp in games_played:
-            game_counts[gp] = game_counts.get(gp, 0) + 1
-        labels = list(game_counts.keys())
-        sizes = list(game_counts.values())
+        top_games = sorted(game_counts.items(), key=lambda x: (-x[1], x[0]))[:5]
+        labels = [_short_label(item[0], 14) for item in top_games]
+        sizes = [item[1] for item in top_games]
         pie_colors = [(r/255, g/255, b/255) for r, g, b in
                       [BLUE, GREEN, RED, ORANGE, PURPLE, TEAL][:len(labels)]]
-        axes[1].pie(sizes, labels=labels, colors=pie_colors, autopct="%1.1f%%", startangle=90)
-        axes[1].set_title("Most Played Games")
+        wedges, _, autotexts = axes[1].pie(
+            sizes,
+            colors=pie_colors,
+            startangle=90,
+            autopct=lambda pct: f"{pct:.0f}%" if pct >= 8 else "",
+            pctdistance=0.72,
+            wedgeprops={"width": 0.42, "edgecolor": "white", "linewidth": 2},
+            textprops={"fontsize": 10, "color": "#2f2f2f", "fontweight": "bold"},
+        )
+        for autotext in autotexts:
+            autotext.set_color("#2f2f2f")
+        legend_labels = [f"{label} ({count})" for label, count in zip(labels, sizes)]
+        axes[1].legend(
+            wedges,
+            legend_labels,
+            loc="center left",
+            bbox_to_anchor=(0.88, 0.5),
+            frameon=False,
+            fontsize=9,
+        )
+        axes[1].set_title("Most Played Games", fontsize=12, fontweight="bold")
+        axes[1].set_aspect("equal")
     else:
-        axes[1].text(0.5, 0.5, "No games played yet", ha="center", va="center")
-        axes[1].set_title("Most Played Games")
+        axes[1].text(
+            0.5,
+            0.5,
+            "No games played yet",
+            ha="center",
+            va="center",
+            fontsize=12,
+            color="#4a4a4a",
+        )
+        axes[1].set_title("Most Played Games", fontsize=12, fontweight="bold")
+        axes[1].set_xticks([])
+        axes[1].set_yticks([])
 
-    plt.tight_layout()
-    plt.savefig(str(SCRIPT_DIR / "stats.png"), dpi=100)
+    plt.savefig(
+        str(SCRIPT_DIR / "stats.png"),
+        dpi=140,
+        bbox_inches="tight",
+        pad_inches=0.18,
+    )
     plt.close()
 
     return str(SCRIPT_DIR / "stats.png")
@@ -157,6 +253,28 @@ def draw_text(screen, text, x, y, font, color=BLACK, center=False):
         rect.topleft = (x, y)
     screen.blit(surface, rect)
     return rect
+
+
+def draw_stat_card(
+    screen,
+    rect: pygame.Rect,
+    label: str,
+    value: str,
+    accent,
+    subtitle: str | None = None,
+):
+    """Render a compact stat card for the post-game summary."""
+    pygame.draw.rect(screen, (250, 250, 250), rect, border_radius=14)
+    pygame.draw.rect(screen, accent, rect, width=3, border_radius=14)
+
+    label_font = pygame.font.SysFont("Arial", 16, bold=True)
+    value_font = pygame.font.SysFont("Arial", 24, bold=True)
+    sub_font = pygame.font.SysFont("Arial", 14)
+
+    draw_text(screen, label, rect.centerx, rect.y + 18, label_font, accent, center=True)
+    draw_text(screen, _short_label(value, 18), rect.centerx, rect.y + 47, value_font, DARK_GRAY, center=True)
+    if subtitle:
+        draw_text(screen, _short_label(subtitle, 22), rect.centerx, rect.y + 73, sub_font, DARK_GRAY, center=True)
 
 
 def game_menu(screen, player1: str, player2: str):
@@ -259,59 +377,120 @@ def post_game_screen(screen, winner: str, loser: str, game_name: str):
     Returns True to play again, False to quit.
     """
     clock = pygame.time.Clock()
-    title_font = pygame.font.SysFont("Arial", 36, bold=True)
-    body_font = pygame.font.SysFont("Arial", 24)
+    title_font = pygame.font.SysFont("Arial", 32, bold=True)
+    subtitle_font = pygame.font.SysFont("Arial", 18)
+    body_font = pygame.font.SysFont("Arial", 22)
     button_font = pygame.font.SysFont("Arial", 26, bold=True)
 
-    # Generate stats image
-    stats_img_path = show_visualizations()
+    stats_data = load_stats_data()
+    win_counts = stats_data["win_counts"] if stats_data else {}
+    game_counts = stats_data["game_counts"] if stats_data else {}
+    games_played = stats_data["games_played"] if stats_data else []
+
+    stats_img_path = show_visualizations(stats_data)
     stats_surface = None
     if stats_img_path and os.path.exists(stats_img_path):
         try:
-            stats_surface = pygame.image.load(stats_img_path)
-            # Scale to fit the screen
+            stats_surface = pygame.image.load(stats_img_path).convert_alpha()
             img_w, img_h = stats_surface.get_size()
-            scale = min(650 / img_w, 300 / img_h)
+            scale = min(620 / img_w, 250 / img_h)
             new_w, new_h = int(img_w * scale), int(img_h * scale)
-            stats_surface = pygame.transform.scale(stats_surface, (new_w, new_h))
+            stats_surface = pygame.transform.smoothscale(stats_surface, (new_w, new_h))
         except Exception:
             stats_surface = None
+
+    total_games = len(games_played)
+    if win_counts:
+        top_winner_name, top_winner_count = sorted(
+            win_counts.items(), key=lambda x: (-x[1], x[0])
+        )[0]
+    else:
+        top_winner_name, top_winner_count = ("No wins yet", 0)
+
+    if game_counts:
+        top_game_name, top_game_count = sorted(
+            game_counts.items(), key=lambda x: (-x[1], x[0])
+        )[0]
+    else:
+        top_game_name, top_game_count = ("No games yet", 0)
 
     running = True
     while running:
         mouse_pos = pygame.mouse.get_pos()
-        screen.fill(WHITE)
+        screen.fill((248, 248, 248))
 
-        # Result text
         if winner == "draw":
-            draw_text(screen, f"{game_name} - It's a Draw!", SCREEN_WIDTH // 2, 40, title_font, ORANGE, center=True)
+            draw_text(screen, f"{game_name} - It's a Draw!", SCREEN_WIDTH // 2, 42, title_font, ORANGE, center=True)
         else:
-            draw_text(screen, f"{game_name} - {winner} Wins!", SCREEN_WIDTH // 2, 40, title_font, GREEN, center=True)
+            draw_text(screen, f"{game_name} - {winner} Wins!", SCREEN_WIDTH // 2, 42, title_font, GREEN, center=True)
+        draw_text(
+            screen,
+            "Latest result plus lifetime hub stats",
+            SCREEN_WIDTH // 2,
+            82,
+            subtitle_font,
+            DARK_GRAY,
+            center=True,
+        )
 
-        # Stats image
+        chart_rect = pygame.Rect(40, 112, 620, 250)
+        pygame.draw.rect(screen, WHITE, chart_rect, border_radius=18)
+        pygame.draw.rect(screen, LIGHT_GRAY, chart_rect, width=2, border_radius=18)
         if stats_surface:
-            img_rect = stats_surface.get_rect(center=(SCREEN_WIDTH // 2, 250))
+            img_rect = stats_surface.get_rect(center=chart_rect.center)
             screen.blit(stats_surface, img_rect)
         else:
-            draw_text(screen, "No statistics available yet.", SCREEN_WIDTH // 2, 250, body_font, DARK_GRAY, center=True)
+            draw_text(screen, "No statistics available yet.", SCREEN_WIDTH // 2, chart_rect.centery, body_font, DARK_GRAY, center=True)
 
-        # Play Again button
-        again_rect = pygame.Rect(120, 440, 200, 50)
+        card_y = 386
+        card_w = 180
+        card_h = 96
+        gap = 20
+        start_x = 60
+        total_rect = pygame.Rect(start_x, card_y, card_w, card_h)
+        winner_rect = pygame.Rect(start_x + card_w + gap, card_y, card_w, card_h)
+        game_rect = pygame.Rect(start_x + 2 * (card_w + gap), card_y, card_w, card_h)
+
+        draw_stat_card(
+            screen,
+            total_rect,
+            "Matches Played",
+            str(total_games),
+            TEAL,
+            "Across all games",
+        )
+        draw_stat_card(
+            screen,
+            winner_rect,
+            "Top Winner",
+            top_winner_name,
+            GREEN,
+            f"{top_winner_count} win(s)",
+        )
+        draw_stat_card(
+            screen,
+            game_rect,
+            "Most Played",
+            top_game_name,
+            ORANGE,
+            f"{top_game_count} match(es)",
+        )
+
+        again_rect = pygame.Rect(110, 530, 210, 52)
         if again_rect.collidepoint(mouse_pos):
             pygame.draw.rect(screen, GREEN, again_rect, border_radius=10)
-            draw_text(screen, "Play Again", 220, 465, button_font, WHITE, center=True)
+            draw_text(screen, "Play Again", again_rect.centerx, again_rect.centery, button_font, WHITE, center=True)
         else:
             pygame.draw.rect(screen, GREEN, again_rect, width=3, border_radius=10)
-            draw_text(screen, "Play Again", 220, 465, button_font, GREEN, center=True)
+            draw_text(screen, "Play Again", again_rect.centerx, again_rect.centery, button_font, GREEN, center=True)
 
-        # Quit button
-        quit_rect = pygame.Rect(380, 440, 200, 50)
+        quit_rect = pygame.Rect(380, 530, 210, 52)
         if quit_rect.collidepoint(mouse_pos):
             pygame.draw.rect(screen, RED, quit_rect, border_radius=10)
-            draw_text(screen, "Quit", 480, 465, button_font, WHITE, center=True)
+            draw_text(screen, "Quit", quit_rect.centerx, quit_rect.centery, button_font, WHITE, center=True)
         else:
             pygame.draw.rect(screen, RED, quit_rect, width=3, border_radius=10)
-            draw_text(screen, "Quit", 480, 465, button_font, RED, center=True)
+            draw_text(screen, "Quit", quit_rect.centerx, quit_rect.centery, button_font, RED, center=True)
 
         pygame.display.flip()
         clock.tick(FPS)
