@@ -1,28 +1,27 @@
 \documentclass[12pt,a4paper]{article}
 
 \usepackage[margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
 \usepackage{hyperref}
 \usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
 \usepackage{listings}
 \usepackage{xcolor}
-\usepackage{booktabs}
-\usepackage{enumitem}
+\usepackage{float}
 
-\definecolor{codebg}{rgb}{0.95,0.95,0.95}
+\definecolor{codebg}{rgb}{0.96,0.96,0.96}
 \lstset{
     backgroundcolor=\color{codebg},
     basicstyle=\ttfamily\small,
     breaklines=true,
     frame=single,
-    numbers=left,
-    numberstyle=\tiny\color{gray},
-    keywordstyle=\color{blue},
-    commentstyle=\color{green!50!black},
-    stringstyle=\color{red!60!black},
+    numbers=none
 }
 
 \title{\textbf{Mini Game Hub} \\ \large Project Report}
-\author{Shresth \and Aryan}
+\author{Aryan(22b1205) \and Shresth(22b2211)}
 \date{\today}
 
 \begin{document}
@@ -31,147 +30,259 @@
 \tableofcontents
 \newpage
 
-% ─────────────────────────────────────────────────────────────────────
-\section{External Libraries Used}
+\section{External Libraries}
 
-\begin{table}[h]
+\begin{table}[H]
 \centering
-\begin{tabular}{ll}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
 \toprule
-\textbf{Library} & \textbf{Purpose} \\
+\textbf{Library / Tool} & \textbf{Purpose in the Project} \\
 \midrule
-\texttt{pygame-ce}     & Graphical user interface for all games and menus \\
-\texttt{numpy}         & Board representation as 2-D arrays; vectorised win detection \\
-\texttt{matplotlib}    & Post-game bar and pie chart visualisations \\
-\texttt{pathlib}       & Cross-platform file path handling \\
-\texttt{csv}           & Reading/writing \texttt{history.csv} \\
-\texttt{subprocess}    & Calling \texttt{leaderboard.sh} from Python \\
-\texttt{datetime}      & Timestamping game results \\
-\texttt{collections.Counter} & Counting wins and game frequencies for charts \\
+\texttt{pygame-ce} & Builds the graphical interface for the game menu, board rendering, input handling, buttons, and post-game screens. \\
+\texttt{numpy} & Stores all board states as arrays and powers vectorized rule checks such as Tic-Tac-Toe win detection, Connect Four pattern scans, and Othello disc counting. \\
+\texttt{matplotlib} & Generates the post-game charts that summarize top winners and most-played games. The rendered chart image is then embedded in the Pygame results screen. \\
+\texttt{bash} & Used for the authentication entry point and the terminal leaderboard script. This kept the shell scripting portion of the assignment substantial rather than decorative. \\
+\texttt{awk}, \texttt{sort}, \texttt{tail}, \texttt{wc}, \texttt{mktemp} & Used inside \texttt{leaderboard.sh} to parse \texttt{history.csv}, aggregate per-game statistics, and print a formatted table. \\
+\texttt{sha256sum} / \texttt{shasum -a 256} & Used in \texttt{main.sh} to hash passwords before storing them in \texttt{users.tsv}. The script auto-detects which command exists on the host OS. \\
+\texttt{tectonic} & Used to compile this report into \texttt{report.pdf} through the included Makefile. \\
 \bottomrule
-\end{tabular}
-\caption{Python libraries and their roles.}
+\end{tabularx}
+\caption{External libraries and tools used in the project.}
 \end{table}
 
-Bash commands used: \texttt{sha256sum} / \texttt{shasum} (for SHA-256 hashing),
-\texttt{awk} (text processing in \texttt{leaderboard.sh}), and standard utilities
-(\texttt{sort}, \texttt{wc}, \texttt{tail}).
+In addition to the tools above, the Python standard library plays a supporting role. For example, \texttt{pathlib} simplifies cross-platform paths, \texttt{subprocess} invokes the Bash leaderboard from Python, \texttt{datetime} timestamps recorded matches, and \texttt{abc}/\texttt{typing} help structure the shared board-game base class.
 
-% ─────────────────────────────────────────────────────────────────────
+\section{Design \& Architecture}
+
+\subsection{High-Level Structure}
+
+The project is intentionally split into two layers:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Shell entry and persistence layer.} \texttt{main.sh} authenticates two players, registers new users when needed, and launches the Python application with the chosen usernames. \texttt{leaderboard.sh} reads persistent history from \texttt{history.csv} and prints a sortable terminal leaderboard.
+    \item \textbf{Python game engine layer.} \texttt{game.py} owns the graphical menu, game selection, result recording, chart generation, and post-game flow. The individual games live under \texttt{games/} and inherit shared behavior from \texttt{games/base\_game.py}.
+\end{enumerate}
+
+This split was a deliberate design choice. Authentication and leaderboard reporting map naturally to Bash scripts and text files, while the interactive board games themselves are better handled in Python with Pygame and NumPy.
+
+\subsection{Core Components}
+
+\paragraph{Authentication and launch flow.}
+The program starts in \texttt{main.sh}. It ensures \texttt{users.tsv} exists, hashes passwords, enforces that Player 1 and Player 2 are different users, and then launches \texttt{game.py} with two validated usernames. This gives the rest of the system a clean contract: once Python starts, it can assume the players are already authenticated.
+
+\paragraph{Game hub orchestrator.}
+\texttt{game.py} is the main controller. It:
+
+\begin{itemize}[leftmargin=*]
+    \item shows the menu of available games and leaderboard sort options,
+    \item launches the selected game object,
+    \item records results to \texttt{history.csv},
+    \item calls the Bash leaderboard,
+    \item generates a Matplotlib chart image, and
+    \item shows a post-game screen with summary cards and replay/quit options.
+\end{itemize}
+
+The advantage of this central controller is that each individual game class stays focused on its own rules and rendering, while the hub owns cross-cutting concerns such as history, analytics, and session flow.
+
+\paragraph{Shared board-game base class.}
+\texttt{games/base\_game.py} provides the common state used by all board games:
+
+\begin{itemize}[leftmargin=*]
+    \item player names,
+    \item current turn,
+    \item a NumPy board array,
+    \item reset/turn-switch helpers, and
+    \item a shared one-step undo snapshot mechanism.
+\end{itemize}
+
+Adding undo here was especially useful because the same pattern was needed across Tic-Tac-Toe, Connect Four, and Othello. By storing the last board state and a small amount of extra per-game metadata, the games can each offer one-step undo without duplicating the full snapshot infrastructure.
+
+\paragraph{Game modules.}
+Each game module combines game-specific rules with its own Pygame rendering code:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{tictactoe.py}: 10x10 board, five-in-a-row win condition, human-vs-human mode, and a single-player engine mode.
+    \item \texttt{connect4.py}: 7x7 gravity-based placement, animated drops, and four-in-a-row detection.
+    \item \texttt{othello.py}: legal move scanning in eight directions, disc flipping, pass-turn handling, and end-game score comparison.
+\end{itemize}
+
+\paragraph{Persistent data and reporting.}
+Two text files provide simple persistence:
+
+\begin{itemize}[leftmargin=*]
+    \item \texttt{users.tsv} stores usernames and password hashes.
+    \item \texttt{history.csv} stores winner, loser, timestamp, and game name for each completed match.
+\end{itemize}
+
+This file-based approach is lightweight, easy to inspect during development, and sufficient for a small local game hub. It also keeps the Bash analytics straightforward because the leaderboard can operate directly on CSV rows.
+
+\subsection{Key Design Decisions and Rationale}
+
+\paragraph{NumPy boards instead of nested Python lists.}
+Using NumPy for every board gave the project a consistent representation and made the rule checks cleaner. Tic-Tac-Toe and Connect Four particularly benefit because they need repeated pattern detection over a grid. Vectorized operations made those checks concise and less error-prone than manual loops over every possible segment.
+
+\paragraph{Heuristic engine instead of minimax.}
+The single-player Tic-Tac-Toe mode uses a scoring heuristic instead of a full minimax search. That was a practical tradeoff: on a 10x10 board with a five-in-a-row target, a simple heuristic that prioritizes wins, blocks, and central control gives responsive play without introducing expensive search logic or a noticeable UI delay.
+
+\paragraph{Matplotlib rendered to file, then loaded into Pygame.}
+Pygame and Matplotlib do not naturally share the same live UI pipeline. We therefore render charts using Matplotlib's non-interactive \texttt{Agg} backend, save the chart image to \texttt{stats.png}, and load that image inside the Pygame post-game screen. This separation avoids event-loop conflicts and keeps chart rendering deterministic.
+
+\paragraph{Leaderboard kept in Bash.}
+We intentionally did not move the leaderboard into Python, even though that would have been possible. Keeping it in Bash preserved the mixed-language nature of the assignment and gave the shell portion a meaningful job beyond startup scripting. The final version also handles game names with spaces correctly, which mattered once \texttt{Connect Four} and \texttt{Tic-Tac-Toe} both appeared in the same history file.
+
 \section{Features Implemented}
 
 \begin{enumerate}[leftmargin=*]
-    \item \textbf{Bash Authentication} (\texttt{main.sh}) -- Login and registration
-          for two players with SHA-256 password hashing.  Stored in
-          \texttt{users.tsv}.
-    \item \textbf{Game Menu} (Pygame GUI) -- Interactive menu to choose
-          Tic-Tac-Toe, Othello, or Connect Four.
-    \item \textbf{Tic-Tac-Toe} -- 10$\times$10 board, 5-in-a-row to win.
-          Win detection via NumPy sliding windows.
-    \item \textbf{Othello (Reversi)} -- 8$\times$8 board with full move
-          validation, disc flipping, turn skipping, and end-game scoring.
-    \item \textbf{Connect Four} -- 7$\times$7 vertical grid with gravity,
-          coin-drop animation, and NumPy-based win detection.
-    \item \textbf{Result Recording} -- Each game appends winner, loser,
-          date, and game name to \texttt{history.csv}.
-    \item \textbf{Leaderboard} (\texttt{leaderboard.sh}) -- Formatted table
-          showing per-user per-game wins, losses, and W/L ratio, sortable
-          by any metric.
-    \item \textbf{Matplotlib Visualisations} -- Top-5 players bar chart and
-          most-played games pie chart displayed after each game.
-    \item \textbf{Post-Game Loop} -- Players can choose to play again or quit.
+    \item \textbf{Two-player authentication and registration.} Players can log in with existing credentials or register new accounts from the terminal. Passwords are stored as SHA-256 hashes rather than plaintext.
+    \item \textbf{Protected two-user session flow.} The script prevents both players from logging in as the same username in the same session.
+    \item \textbf{Graphical game selection hub.} After authentication, the Pygame menu allows users to choose between Tic-Tac-Toe, Tic-Tac-Toe vs Engine, Othello, and Connect Four.
+    \item \textbf{10x10 Tic-Tac-Toe.} Supports human-vs-human play with five-in-a-row win detection across horizontal, vertical, diagonal, and anti-diagonal directions.
+    \item \textbf{Single-player Tic-Tac-Toe engine mode.} One player can challenge the computer. A dedicated selection screen lets either authenticated user choose to play against the engine.
+    \item \textbf{Connect Four.} Implements gravity-based placement, animated coin drops, a hover indicator, and vectorized four-in-a-row detection.
+    \item \textbf{Othello / Reversi.} Implements valid-move hints, disc flipping, skipped turns when a player has no legal move, and end-of-game scoring.
+    \item \textbf{One-step undo in every game.} Each game includes an on-screen Undo button and a keyboard shortcut, restoring the immediately previous move only.
+    \item \textbf{Persistent match history.} Finished games append a row to \texttt{history.csv} with winner, loser, timestamp, and game name.
+    \item \textbf{Terminal leaderboard.} The Bash leaderboard prints per-player per-game wins, losses, and win/loss ratios; supports sorting by wins, losses, or ratio; and displays total draw count in the footer.
+    \item \textbf{Readable leaderboard layout.} The leaderboard uses a boxed table, separate game-name and metric rows, and correct handling of multi-word game names.
+    \item \textbf{Post-game analytics.} The results screen shows a chart panel, top-winner summary, most-played-game summary, and total matches played.
+    \item \textbf{Replay flow.} After a finished match, players can either return to the menu and play again or quit the application cleanly.
 \end{enumerate}
 
-% ─────────────────────────────────────────────────────────────────────
-\section{Code Logic Explanation}
+\section{Directory Structure}
 
-\subsection{Generic Base Class (\texttt{base\_game.py})}
-\texttt{BoardGame} is an abstract class providing:
-\begin{itemize}
-    \item A NumPy array (\texttt{self.board}) initialised to zeros.
-    \item Turn tracking via \texttt{current\_player} (1 or 2).
-    \item \texttt{switch\_turn()} toggles between players.
-    \item \texttt{check\_win()} is abstract -- each game implements its own logic.
+\begin{lstlisting}
+.
+|-- .gitignore                  - Git ignore rules for generated files and local artifacts
+|-- Makefile                    - Builds report.pdf from report.tex using Tectonic
+|-- README.md                   - Project overview, setup notes, and repository documentation
+|-- game.py                     - Main Python hub: menu, routing, stats, history, and post-game UI
+|-- games/
+|   |-- __init__.py             - Package exports for the game classes
+|   |-- base_game.py            - Shared board-game base class with turn and undo helpers
+|   |-- connect4.py             - Connect Four rules, animation, rendering, and undo
+|   |-- othello.py              - Othello rules, valid-move scanning, flipping, and undo
+|   `-- tictactoe.py            - 10x10 Tic-Tac-Toe, engine mode, win detection, and undo
+|-- history.csv                 - Persistent match log written after completed games
+|-- leaderboard.sh              - Bash leaderboard and CSV aggregation script
+|-- main.sh                     - Authentication entry point and launcher for the Python hub
+|-- mini_game_hub_problem_statement.pdf
+|                               - Original project brief provided for the assignment
+|-- report.tex                  - LaTeX source for this report
+|-- stats.png                   - Generated chart image used by the post-game screen
+`-- users.tsv                   - Username/password-hash store for registered players
+\end{lstlisting}
+
+\section{Installation \& Setup}
+
+\subsection{Requirements}
+
+\begin{itemize}[leftmargin=*]
+    \item Python 3.10 or newer
+    \item Bash shell
+    \item \texttt{pygame-ce}, \texttt{numpy}, and \texttt{matplotlib}
+    \item Either \texttt{sha256sum} or \texttt{shasum -a 256}
 \end{itemize}
 
-\subsection{Tic-Tac-Toe (\texttt{tictactoe.py})}
-Player~1 places $+1$, Player~2 places $-1$.  Win detection uses
-\texttt{numpy.lib.stride\_tricks.sliding\_window\_view} to extract all
-$5$-cell windows horizontally and vertically, then sums each window.
-A sum of $+5$ means Player~1 wins; $-5$ means Player~2.
-Diagonals are checked via 5$\times$5 sub-blocks and \texttt{np.diagonal}.
+\subsection{Recommended Setup}
 
-\subsection{Othello (\texttt{othello.py})}
-Valid moves are found by scanning all eight compass directions from each
-empty cell.  Disc flipping iterates along each direction until a friendly
-disc is found.  The win condition counts discs using
-\texttt{np.count\_nonzero} (no loops).
+\begin{lstlisting}[language=bash]
+python3 -m venv .venv
+source .venv/bin/activate
+pip install pygame-ce numpy matplotlib
+\end{lstlisting}
 
-\subsection{Connect Four (\texttt{connect4.py})}
-Coins drop to the lowest empty row (found with \texttt{np.where}).
-Win detection creates a boolean mask per player and sums all 4-cell
-windows using NumPy slicing in four directions.  A sum of~4 on the mask
-indicates four-in-a-row.
+No large external assets are required for this project. Everything needed to run the application is already included in the repository, so no Google Drive links or extra downloads are necessary.
 
-\subsection{Authentication (\texttt{main.sh})}
-Passwords are hashed with \texttt{sha256sum} (or \texttt{shasum -a 256}
-on macOS) and stored in \texttt{users.tsv}.  On login the input hash is
-compared against the stored hash.  New users are offered registration.
+\subsection{Building the Report}
 
-\subsection{Leaderboard (\texttt{leaderboard.sh})}
-Reads \texttt{history.csv}, extracts unique players and games using
-\texttt{awk}, then loops over each player to count wins and losses per
-game.  Results are sorted by the user-selected metric and printed in a
-formatted table.
+\begin{lstlisting}[language=bash]
+make
+\end{lstlisting}
 
-% ─────────────────────────────────────────────────────────────────────
-\section{Hurdles Faced and Solutions}
+This uses the provided Makefile to compile \texttt{report.tex} into \texttt{report.pdf}.
 
-\begin{enumerate}
-    \item \textbf{NumPy win detection without loops.}
-          Tic-Tac-Toe's diagonal checks were tricky.  We solved it by
-          using \texttt{sliding\_window\_view} over 5$\times$5 sub-blocks
-          and extracting diagonals with \texttt{np.diagonal}.
+\section{Usage}
 
-    \item \textbf{Connect Four sum ambiguity.}
-          Storing players as 1 and 2 meant two player-2 coins could sum
-          to~4, falsely matching player~1's target.  We fixed this by
-          creating boolean masks per player before summing.
+\subsection{Running the Project}
 
-    \item \textbf{Pygame and Matplotlib conflict.}
-          Both libraries use display backends.  We used Matplotlib's
-          \texttt{Agg} backend to render charts to image files, then
-          loaded them into Pygame as surfaces.
+From the repository root:
 
-    \item \textbf{Cross-platform SHA-256.}
-          Linux has \texttt{sha256sum}, macOS has \texttt{shasum -a 256}.
-          We detect the available command at runtime.
+\begin{lstlisting}[language=bash]
+source .venv/bin/activate
+bash main.sh
+\end{lstlisting}
+
+The expected flow is:
+
+\begin{enumerate}[leftmargin=*]
+    \item Player 1 logs in or registers.
+    \item Player 2 logs in or registers with a different username.
+    \item The graphical menu opens.
+    \item Players choose a game or inspect leaderboard sort options.
+    \item After a game ends, the history file is updated, the terminal leaderboard is printed, and the Pygame post-game summary is shown.
 \end{enumerate}
 
-% ─────────────────────────────────────────────────────────────────────
-\section{What We Would Do with 10 More Hours}
+\subsection{Interaction Notes}
 
-\begin{itemize}
-    \item Add an AI opponent using minimax with alpha-beta pruning.
-    \item Implement network multiplayer so players can compete remotely.
-    \item Add sound effects and background music using Pygame's mixer.
-    \item Create animated transitions between screens.
-    \item Add more games (e.g.\ Checkers, Mancala).
-    \item Implement user profiles with avatars and match history.
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Tic-Tac-Toe / Othello / Connect Four}: mouse clicks place marks or discs.
+    \item \textbf{Undo}: available through the on-screen button and keyboard shortcut.
+    \item \textbf{Leaderboard preview}: the menu includes sort buttons that print the terminal leaderboard by wins, losses, or ratio.
+    \item \textbf{Single-player mode}: the ``Tic-Tac-Toe vs Engine'' option asks which authenticated player wants to challenge the computer.
+    \item \textbf{Exit flow}: after a finished match, players can either play again or quit from the results screen.
 \end{itemize}
 
-% ─────────────────────────────────────────────────────────────────────
-\section{Bibliography}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{stats.png}
+\caption{Example statistics chart generated after a completed match.}
+\end{figure}
 
-\begin{enumerate}
-    \item Pygame CE Documentation: \url{https://pyga.me}
-    \item NumPy Documentation: \url{https://numpy.org/doc/}
-    \item Python \texttt{abc} module: \url{https://docs.python.org/3/library/abc.html}
-    \item Python Inheritance Tutorial: \url{https://docs.python.org/3/tutorial/classes.html}
-    \item Othello Rules: \url{https://www.worldothello.org}
-    \item Connect Four Rules: \url{https://boardgamegeek.com/boardgame/2719/connect-four}
-    \item SHA-256 in Bash: \texttt{man sha256sum}
-    \item Matplotlib Documentation: \url{https://matplotlib.org/stable/}
+\subsection{Direct Launch for Quick Testing}
+
+If the authentication step needs to be bypassed during development, the Python hub can also be launched directly:
+
+\begin{lstlisting}[language=bash]
+python3 game.py <username1> <username2>
+\end{lstlisting}
+
+\section{Retrospective}
+
+\subsection{Challenges and How We Addressed Them}
+
+\paragraph{Mixed-language coordination.}
+One recurring challenge was keeping the Bash and Python parts aligned. Authentication, result recording, leaderboard parsing, and the Pygame screens all depend on a shared understanding of usernames and history rows. We kept this manageable by standardizing the file formats early: tab-separated credentials in \texttt{users.tsv} and comma-separated game history in \texttt{history.csv}.
+
+\paragraph{Rule checking without brittle nested logic.}
+The grid-based games each had different rule complexity. Tic-Tac-Toe needed efficient five-cell scans on a large board, Connect Four needed directional checks that were not confused by player-value encoding, and Othello required directional line scanning and pass logic. NumPy helped on the first two, while a clean directional helper approach kept Othello understandable.
+
+\paragraph{Undo across multiple games.}
+Undo sounds simple, but each game also carries small amounts of metadata beyond the board itself. For example, Othello needs to restore skip-delay state and Tic-Tac-Toe needs to clear engine-thinking state. The shared snapshot system in \texttt{base\_game.py} solved the common part, while each game restored its own additional fields after an undo.
+
+\paragraph{Readable statistics.}
+The first statistics and leaderboard outputs were functional but not very readable. We iterated on both: the post-game chart was made more compact and presentation-friendly, and the terminal leaderboard was reformatted into a clearer boxed layout with a better header structure.
+
+\paragraph{Handling game names with spaces.}
+An unexpected shell-side bug came from using a \texttt{for} loop over game names. This split \texttt{Connect Four} into two separate tokens. We fixed that by reading unique game names line by line from a temporary file, which made the leaderboard robust for multi-word titles.
+
+\subsection{What We Would Do Differently With More Time}
+
+\begin{itemize}[leftmargin=*]
+    \item Replace the plain CSV/TSV persistence with a lightweight database or structured JSON model.
+    \item Record draws in a richer format so leaderboard reports can attribute draw counts to individual players instead of only tracking total draws.
+    \item Expand automated testing for core rule logic, especially around Othello edge cases and engine behavior.
+    \item Improve the single-player engine with deeper search or difficulty levels.
+    \item Add richer visuals such as sound, transitions, and custom art assets while preserving responsiveness.
+\end{itemize}
+
+\section{References}
+
+\begin{enumerate}[leftmargin=*]
+    \item Pygame CE documentation: \url{https://pyga.me}
+    \item NumPy documentation: \url{https://numpy.org/doc/}
+    \item Matplotlib documentation: \url{https://matplotlib.org/stable/}
+    \item Python \texttt{abc} module documentation: \url{https://docs.python.org/3/library/abc.html}
+    \item World Othello Federation rules reference: \url{https://www.worldothello.org}
 \end{enumerate}
 
 \end{document}

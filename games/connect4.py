@@ -159,14 +159,14 @@ class ConnectFour(BoardGame):
         if 0 <= col < COLS:
             cx = col * CELL_SIZE + CELL_SIZE // 2
             cy = TOP_MARGIN // 2  # vertically centred in the top margin
-            # Draw the hover coin with the current player's colour
+           
             pygame.draw.circle(surface, self._player_colour(player), (cx, cy), RADIUS)
 
     def _draw_status(self, surface: pygame.Surface, text: str) -> None:
         """Render a one-line status message beneath the board."""
         font = pygame.font.SysFont("arial", 26, bold=True)
         label = font.render(text, True, WHITE)
-        # Leave room for the undo button on the right.
+        
         x = max(12, (self._undo_button_rect().left - label.get_width()) // 2)
         y = TOP_MARGIN + BOARD_HEIGHT + (STATUS_BAR - label.get_height()) // 2
         surface.blit(label, (x, y))

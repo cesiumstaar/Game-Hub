@@ -13,7 +13,6 @@ __pycache__/
 *.log
 *.out
 *.toc
-*.pdf
 
 # macOS metadata
 .DS_Store
